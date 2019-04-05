@@ -1,0 +1,463 @@
+Entering the correct vdom/gobal config
+
+Remember to enter the correct vdom or global configuration tree before configuring anything:
+
+1
+2
+3
+config global
+config vdom
+	edit <vdom-name>
+To execute any “show” command from any context use the sudo keyword with the global/vdom-name context followed by the normal commands (except “config”) such as:
+
+1
+2
+3
+4
+sudo {global | <vdom-name>} {diagnose | execute | show | get} ...
+ 
+sudo global show system admin
+sudo root get system interface physical
+ 
+
+Show running-config & grep & scp
+
+To show the running configuration (such as “show run” on Cisco) simply type:
+
+1
+show
+To show the entire running configuration with default values use:
+
+1
+show full-configuration
+To omit the “–More–” stops when displaying many lines, you can set the terminal output to the following, which will display all lines at once. This is similar to “terminal length 0” from Cisco. Be careful with it, because this command is persistent. Set it to default after usage!
+
+1
+2
+3
+config system console
+  set output standard
+end
+To find a CLI command within the configuration, you can use the pipe sign “|” with “grep” (similar to “include” on Cisco devices). Note the “-f” flag to show the whole config tree in which the keywords was found, e.g.:
+
+1
+2
+show | grep -f ipv6
+show full-configuration | grep -f ipv6
+Example with grep but WITHOUT the -f option (which makes no sense at all):
+
+1
+2
+3
+4
+5
+6
+FGT90D # show | grep ipv6
+    set gui-ipv6 enable
+        config ipv6
+        config ipv6
+        config ipv6
+                set ipv6 2001:db8::cafe
+Now with the -f option. Note the “<—” at the end of every line that has the “ipv6” keyword in it, while the full configuration part around it is listed.
+
+Click To Expand Code
+You can even extend your grepping by using multiple expressions to grep, wrapped into single quotes and \|, such as: (Thanks to Ulrich’s comment!)
+
+1
+2
+show | grep -f 'internal\|wan'
+diag vpn tunnel list | grep 'name\|esp\|ah'
+ 
+
+In order to copy the configuration via SCP from a backup server you must first enable the SCP protocol for the admin:
+
+1
+2
+3
+config system global
+    set admin-scp enable
+end
+before you can grab it from the backup server, e.g. Linux with:
+
+1
+2
+scp <username>@<FortiGate-ip/name>:sys_config <destination>
+scp admin@192.168.7.106:sys_config ~/fortigate-config-2017-11-20.txt
+ 
+
+To save your config through the CLI in order to have it in the GUI under <username> -> Configuration -> Revisions, use:
+
+1
+execute backup config flash
+Even better, you should enable the following feature which saves a backup of your configuration after each logout automatically:
+
+1
+2
+3
+config system global
+    set revision-backup-on-logout enable
+end
+ 
+
+General Information
+
+The very basics:
+
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+get system interface physical       #overview of hardware interfaces
+get hardware nic <nic-name>         #details of a single network interface, same as: diagnose hardware deviceinfo nic <nic-name>
+fnsysctl ifconfig <nic-name>        #kind of hidden command to see more interface stats such as errors
+get system status                   #==show version
+get system performance status       #CPU and network usage
+diagnose sys top                    #top with all forked processed
+diagnose sys top-summary            #top easier, incl. CPU and mem bars. Forks are displayed by [x13] or whatever
+execute dhcp lease-list
+get system arp
+diagnose ip arp list
+diagnose ipv6 address list
+diagnose ipv6 neighbor-cache list
+diagnose sys ntp status
+diagnose autoupdate versions        #lists the attack definition versions, last update, etc.
+diagnose log test                   #generated all possibe log entries
+diagnose test application dnsproxy 6    #shows the IP addresses of FQDN objects
+diagnose debug crashlog read        #shows crashlog, a status of 0 indicates a normal close of a process!
+ 
+
+After rebooting a fresh device which is already licensed, it takes some time until it is “green” at the dashboard. The following commands can troubleshoot and start the “get license” process. Use the first three to enable debugging and start the process, while the last one disables the debugging again:
+
+1
+2
+3
+4
+diag debug app update -1
+diag debug enable
+exec update-now
+diag debug disable
+To reboot your device, use:
+
+1
+execute reboot
+ 
+
+General Network Troubleshooting
+
+Which is basically ping and traceroute. Unluckily it is shitty difficult to use those commands since you need a couple of subcommands to source pings from a different interface, and so on. Furthermore, the traceroute for IPv6 uses its options on the CLI directly such as “-i <interface>”, while traceroute for IPv4 uses the “traceroute-options …” subcommands:
+
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+execute ping6-options ?
+execute ping6-options source <source-interface-IP>
+execute ping6 <hostname|ip>
+ 
+execute ping-options ?
+execute ping-options source <source-interface-IP>
+execute ping <hostname|ip>
+ 
+execute tracert6 <hostname|ip>
+ 
+execute traceroute <hostname|ip>
+execute traceroute-options ?
+To view the current …-options, use this:
+
+1
+2
+3
+execute ping-options view-settings
+execute ping6-options view-settings
+execute traceroute-options view-settings
+ 
+
+Routing
+
+Routing table, RIB, FIB, policy routes, routing protocols, route cache, and much more. ;) Note the differences between IPv6 and legacy IP.
+
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+get router info6 routing-table      #routing table = active routes
+get router info routing-table all   #IPv4 needs an "all" at the end
+ 
+get router info6 routing-table database  #Routing Information Base WITH inactive routes
+get router info routing-table database
+ 
+get router info6 kernel             #Forwarding Information Base
+get router info kernel
+ 
+diagnose firewall proute6 list      #Policy Routes + WAN Load Balancing
+diagnose firewall proute list
+ 
+get router <routing-protocol>       #basic information about the enabled routing protocol
+diagnose ip rtcache list            #route cache = current sessions w/ routing information
+ 
+
+High Availability
+
+Diagnose and managing: (Just another **** example on how “get | diagnose | execute” is mixed along with “sys | system”.)
+
+1
+2
+3
+4
+5
+get system ha status
+diagnose sys ha status
+execute ha manage ?                 #switch to the CLI of a secondary unit
+execute ha manage <device-index>
+diagnose sys ha checksum show       #verify the checksum of all synchronized peers
+Manually test a failover by decreasing the priority of the current master (since highest priority wins):
+
+1
+execute ha set-priority <serial-number> <new-priority>
+Don’t forget to restore the priority value to your original one!
+
+
+ 
+Start a sync at a secondary device to (from?) the master: (Honestly, I am not sure what “synchronize” means in this command. I would like to decide which config to push to the other device. The Fortinet documentation reads: “Use this command from a subordinate unit in an HA cluster to manually synchronize its configuration with the
+primary unit or to stop a synchronization process that is in progress.”)
+
+1
+execute ha synchronize {start | stop}
+ 
+
+Session Table
+
+Display the current active sessions:
+
+1
+2
+3
+4
+5
+6
+7
+get system session list             #rough view with NAT, only IPv4
+ 
+diagnose sys session filter clear
+diagnose sys session filter ?
+diagnose sys session filter dst 8.8.8.8
+diagnose sys session filter dport 53
+diagnose sys session list           #show the session table with the filter just set
+ 
+
+Remote Server Authentication Test
+
+In order to test user credentials against some (remote) authentication servers such as LDAP or RADIUS or even local:
+
+1
+2
+3
+diagnose test authserver ldap <server_name> <username> <password>
+diagnose test authserver radius <server_name> <chap | pap | mschap | mschap2> <username> <password>
+diagnose test authserver local <group_name> <username> <password>
+ 
+
+FSSO User Authentication
+
+When you’re using some kind of Fortinet single sign-on (FSSO) features such as the agentless/agent polling mode to a Windows AD you can use the following commands to get some information about the recognized users and agent servers:
+
+1
+2
+3
+diagnose debug authd fsso list
+diagnose debug authd fsso server-status
+diagnose firewall auth list
+The first one shows all monitored users with details concerning their LDAP groups:
+
+Click To Expand Code
+while the last one shows the users with their corresponding FortiGate user groups and traffic counters:
+
+Click To Expand Code
+If you need further debugging messages you can enable it for the Fortigate non-blocking auth daemon and the FSSO daemon:
+
+1
+2
+3
+diagnose debug enable
+diagnose debug application fnbamd 255
+diagnose debug application fssod 255
+ 
+
+Sniffer / Packet Capture
+
+Sniff packets like tcpdump does. (Only if the built-in packet capture feature in the GUI does not meet your requirements.) This can be used for investigating connection problems between two hosts. There are no details of the firewall policy decisions. Use the debug flow (next paragraph) for analysis about firewall policies, etc.
+
+1
+diagnose sniffer packet <interface|any> '<tcpdump-filter>' <verbose> <count> <time-format>
+with:
+
+verbose:
+1: print header of packets
+2: print header and data from ip of packets
+3: print header and data from ethernet of packets (if available)
+4: print header of packets with interface name <<<<<< good default choice
+5: print header and data from ip of packets with interface name
+6: print header and data from ethernet of packets (if available) with intf name
+count: number of packets
+time-format:
+a: UTC time
+l: local time
+
+Examples: (Thanks to the comment from Ulrich for the IPv6 example)
+
+1
+2
+3
+4
+diagnose sniffer packet any 'host 8.8.8.8' 4 4 l
+diagnose sniffer packet any 'host 8.8.8.8 and dst port 53' 4 10 a
+diagnose sniffer packet wan1 'dst port (80 or 443)' 2 50 l
+diagnose sniffer packet any 'net 2001:db8::/32' 6 1000 l
+Here are two more examples on how to show LLDP or CDP packets in order to reveal the connected layer 2 ports from switches. Kudos to Joachim Schwierzeck.
+
+1
+2
+3
+4
+5
+LLDP:
+diagnose sniffer packet port1 'ether proto 0x88cc' 4 1 a
+ 
+CDP:
+diagnose sniffer packet port1 'ether[20:2] == 0x2000' 6 1 a
+ 
+
+Flow
+
+If you want to see the FortiGate details about a connection, use this kind of debug. E.g., it shows the routing decision and the policy, which allowed the connection.
+
+diagnose debug reset
+diagnose debug flow filter ?
+diagnose debug flow filter saddr 172.16.27.148
+diagnose debug flow filter daddr 8.8.8.8
+diagnose debug flow show console enable
+diagnose debug enable
+diagnose debug flow trace start 10  #display the next 10 packets, after that, disable the flow:
+diagnose debug disable
+Example:
+
+fd-wv-fw04 # diagnose debug reset
+ 
+fd-wv-fw04 # diagnose debug flow filter daddr 8.8.8.8
+ 
+fd-wv-fw04 # diagnose debug flow show console enable
+show trace messages on console
+ 
+fd-wv-fw04 # diagnose debug enable
+ 
+fd-wv-fw04 # diagnose debug flow trace start 20
+id=20085 trace_id=11 func=print_pkt_detail line=4420 msg="vd-root received a packet(proto=17, 192.168.160.10:55859->8.8.8.8:53) from fg-trust. "
+id=20085 trace_id=11 func=init_ip_session_common line=4569 msg="allocate a new session-0001f004"
+id=20085 trace_id=11 func=vf_ip4_route_input line=1596 msg="find a route: flags=00000000 gw-172.16.1.1 via wan1"
+id=20085 trace_id=11 func=fw_forward_handler line=671 msg="Allowed by Policy-16:"
+id=20085 trace_id=11 func=__ip_session_run_tuple line=2601 msg="run helper-dns-udp(dir=original)"
+id=20085 trace_id=12 func=print_pkt_detail line=4420 msg="vd-root received a packet(proto=17, 192.168.160.10:63624->8.8.8.8:53) from fg-trust. "
+id=20085 trace_id=12 func=init_ip_session_common line=4569 msg="allocate a new session-0001f005"
+id=20085 trace_id=12 func=vf_ip4_route_input line=1596 msg="find a route: flags=00000000 gw-172.16.1.1 via wan1"
+id=20085 trace_id=12 func=fw_forward_handler line=671 msg="Allowed by Policy-16:"
+id=20085 trace_id=12 func=__ip_session_run_tuple line=2601 msg="run helper-dns-udp(dir=original)"
+ 
+fd-wv-fw04 # diagnose debug disable
+ 
+
+
+ 
+VPN
+
+To show details about IKE/IPsec connections, use these commands:
+
+
+get vpn ike gateway <name>
+get vpn ipsec tunnel name <name>
+get vpn ipsec tunnel details
+diagnose vpn tunnel list
+diagnose vpn ipsec status           #shows all crypto devices with counters that are used by the VPN
+get router info routing-table all
+
+
+
+To debug IKE/IPsec sessions, use the VPN debug:
+
+diagnose debug reset
+diagnose vpn ike log-filter clear
+diagnose vpn ike log-filter ?
+diagnose vpn ike log-filter dst-addr4 1.2.3.4
+diagnose debug app ike 255          #shows phase 1 and phase 2 output
+diagnose debug enable               #after enough output, disable the debug:
+diagnose debug disable
+
+
+
+To reset a certain VPN connection, use this (Credit):
+
+diag vpn tunnel reset <phase1 name>
+ 
+
+Log
+
+For investigating the log entries (similar to the GUI), use the following filters, etc.:
+
+
+execute log filter reset
+execute log filter category event
+execute log filter field            #press enter for options
+execute log filter field dstport 8001
+execute log filter view-lines 1000
+execute log filter start-line 1
+execute log display
+ 
+
+Defaults
+
+Just a reminder for myself:
+
+IP: 192.168.1.99
+Login: admin
+Password: <blank>
+
+To change the IP address of the mgmt interface (or any other) via the CLI, these commands can be used:
+
+
+config system interface
+edit mgmt
+set ip 192.168.1.1 255.255.255.0
+set allowaccess ping https ssh
+next
+end
+ 
