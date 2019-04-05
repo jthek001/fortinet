@@ -1,0 +1,184 @@
+Products
+FortiGate
+Description
+This article describes the First steps to troubleshoot connectivity problems to or through a FortiGate.
+
+It is also helpful to provide this diagnostic information to the Fortinet Technical Assistance Center when opening a ticket to address a connectivity issue.
+
+Let's assume the following diagram:
+
+[ PC1 ] ===   port1 [ FortiGate ] port2 ==== [ PC2]
+
+
+Assumptions : PC1 and PC2 can be either local to port1 and port2 subnets, or on remote subnets routed via routers.
+Scope
+All FortiGates and FortiOS - NAT or Transparent mode.
+Solution
+Summary :
+Step 1: Routing table check (in NAT mode)
+Step 2: Verify is services are opened (if access to the FortiGate)
+Step 3: Sniffer trace
+Step 4: Debug flow
+Step 5: Session list
+
+Note : On FortiGate using NP2 interfaces, the traffic might be offloaded to the hardware processor, therefore changing the analysis with a sniffer trace or a debug flow as the traffic will not be seen with this procedure.  For using the sniffer and debug flow with NP2 ports, NP2 offloading must be disabled. Please refer to the related article given further below.
+
+
+
+Step 1 : Routing table verification
+
+
+If the FortiGate is running in NAT mode, verify that all desired routes are in the routing table : local subnets, default routes, specific static routes, dynamic routing protocol.
+The Fortigate will drop packets in case of RPF check failure (see related article at the end of this page  Details about RPF (Reverse Path Forwarding), also called Anti Spoofing, on FortiOS )
+
+
+To verify the routing table, use the CLI command "get router info routing-table all" as per the example below :
+
+FGT# get router info routing-table all
+
+Codes: K - kernel, C - connected, S - static, R - RIP, B - BGP
+       O - OSPF, IA - OSPF inter area
+       N1 - OSPF NSSA external type 1, N2 - OSPF NSSA external type 2
+       E1 - OSPF external type 1, E2 - OSPF external type 2
+       i - IS-IS, L1 - IS-IS level-1, L2 - IS-IS level-2, ia - IS-IS inter area
+       * - candidate default
+
+S*      0.0.0.0/0 [10/0] via 192.168.183.254, port1, [0/50]
+C       10.0.0.0/24 is directly connected, VLAN_on_port1
+C       10.160.0.0/23 is directly connected, port2
+C       12.0.0.0/24 is directly connected, port1
+C       172.16.78.0/24 is directly connected, VLAN_on_port3
+C       192.168.182.0/23 is directly connected, port1 
+
+
+
+
+
+Step 2 : Verify if services are opened on the port (if accessing to the FortiGate itself)
+
+
+2.1 - Verify that all appropriate services are opened on the interface that is being access (telnet, http...)
+
+Example : 
+
+FGT # show system interface port1
+config system interface
+    edit "port1"
+        set vdom "root"
+        set ip 192.168.182.108 255.255.254.0
+        set allowaccess ping https ssh http telnet
+        set type physical
+    next
+end
+
+
+2.2 - If the interface is accessed via another port of the FortiGate, a firewall policy must exist to allow this traffic
+
+Example : 
+
+config firewall policy
+    edit 1
+        set srcintf "port1"
+        set dstintf "port2"
+            set srcaddr "all"
+            set dstaddr "all"
+        set action accept
+        set schedule "always"
+            set service "ANY"
+    next
+
+
+
+
+Step 3: Sniffer trace
+
+
+Take a sniffer trace as per the following examples when running a constant ping (or TCP connection) from PC1 to PC2.
+This will answer the following questions:
+- Is traffic arriving to the FortiGate and does it arrive on the expected port?
+- Is the ARP resolution correct for the targeted next-hop?
+- Is the traffic exiting the FortiGate to the destination?
+- Is the traffic sent back to the source?
+
+
+FGT# diagnose sniffer packet any "host <PC1> and host <PC2>" 4
+or
+FGT# diagnose sniffer packet any "(host <PC1> and host <PC2>) and icmp" 4
+
+Including the ARP protocol in the filter may be useful to troubleshoot a failure in the ARP resolution (for instance PC2 may be down and not responding to the FortiGate ARP requests)
+
+FGT# diagnose sniffer packet any "host <PC1> and host <PC2> or arp" 4
+
+To stop the sniffer, type CTRL+C.
+
+With verbosity 4 above, the sniffer trace will display the port names where traffic ingresses/egresses.
+
+
+
+Step 4: Debug flow
+
+
+Traffic should come in and leave the FortiGate. If not, proceed with a debug flow as follows:
+
+diag debug enable
+diag debug flow filter add <PC1>    or    diag debug flow filter add <PC2>
+diag debug flow show console enable
+diag debug flow trace start 100          <== this will display 100 packets for this flow
+diag debug enable
+
+To stop all other debug, type "diag debug flow trace stop".
+
+
+Examples of results that may be obtained from a debug flow :
+
+3.1 - The following is an example of debug flow output for traffic that has got no matching Firewall Policy, hence blocked by the FortiGate :
+
+
+id=20085 trace_id=319 func=resolve_ip_tuple_fast line=2825 msg="vd-root received a packet(proto=6, 192.168.129.136:2854->192.168.96.153:1863) from port3."
+id=20085 trace_id=319 func=resolve_ip_tuple line=2924 msg="allocate a new session-013004ac"
+id=20085 trace_id=319 func=vf_ip4_route_input line=1597 msg="find a route: gw-192.168.150.129 via port1"
+id=20085 trace_id=319 func=fw_forward_handler line=248 msg=" Denied by forward policy check"
+
+
+3.2 - The following is an example of debug flow output for traffic going into an IPSec tunnel in Policy based. This is a working scenario. See traffic is matching and  processed by Firewall Policy #2
+
+
+
+id=20085 trace_id=1 msg="vd-root received a packet (proto=1, 10.72.55.240:1->10.71.55.10:8) from internal."
+id=20085 trace_id=1 msg="allocate a new session-00001cd3"
+id=20085 trace_id=1 msg="find a route: gw-192.168.56.230 via wan1"
+id=20085 trace_id=1 msg="Allowed by Policy-2: encrypt"
+id=20085 trace_id=1 msg="enter IPsec tunnel-RemotePhase1"
+id=20085 trace_id=1 msg="encrypted, and send to 192.168.225.22 with source 192.168.56.226"
+id=20085 trace_id=1 msg="send to 192.168.56.230 via intf-wan1“
+id=20085 trace_id=2 msg="vd-root received a packet (proto=1, 10.72.55.240:1-10.71.55.10:8) from internal."
+id=20085 trace_id=2 msg="Find an existing session, id-00001cd3, original direction"
+id=20085 trace_id=2 msg="enter IPsec ="encrypted, and send to 192.168.225.22 with source 192.168.56.226“ tunnel-RemotePhase1"
+id=20085 trace_id=2 msgid=20085 trace_id=2 msg="send to 192.168.56.230 via intf-wan1"
+
+
+
+Other information messages are explained in the article "Troubleshooting Tip : debug flow messages "iprope_in_check() check failed, drop" - "Denied by forward policy check" - "reverse path check fail, drop"
+
+
+
+
+Step 5: Session list
+
+
+One further step is to look at the firewall session. For this, some filters may be used to reduce the output; see the following example:
+
+diag sys session filter src PC1
+diag sys session list 
+or 
+diag sys session filter dst PC1
+diag sys session list 
+
+The analysis of the output of this command  is further detailed in the related article below  (FortiGate Firewall session list information )
+
+
+To clear all sessions corresponding to a filter:
+
+diag sys session filter dst PC1
+diag sys session clear
+
