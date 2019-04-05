@@ -1,0 +1,67 @@
+When troubleshooting connectivity problems, to or through a FortiGate, with the "diagnose debug flow" commands  , the following messages can appear :
+
+ "iprope_in_check() check failed, drop"  or "Denied by forward policy check"  or "reverse path check fail, drop"
+
+
+See also other details about "diagnose debug flow" in the article FD30038 :
+
+Troubleshooting Tip : First steps to troubleshoot connectivity problems through a FortiGate with sniffer, debug flow, session list, routing table
+Solution
+Root causes for "iprope_in_check() check failed, drop"
+
+
+1- When accessing the FortiGate for remote management (ping, telnet, ssh...), the service that is being accessed is not enabled on the interface.
+
+Example : ping or telnet the DMZ interface FortiGate of a Fortigate, IP address 10.50.50.2, where ping an telnet are not enabled 
+
+id=36870 pri=emergency trace_id=1 msg="vd-root received a packet(proto=1,10.50.50.1:4608->10.50.50.2:8) from dmz."
+id=36870 pri=emergency trace_id=1 msg="allocate a new session-0000d5ad"
+id=36870 pri=emergency trace_id=1 msg="iprope_in_check() check failed, drop"
+id=36870 pri=emergency trace_id=8 msg="vd-root received a packet(proto=6, 10.50.50.1:1160->10.50.50.2:23) from dmz."
+id=36870 pri=emergency trace_id=8 msg="allocate a new session-0000d96a"
+id=36870 pri=emergency trace_id=8 msg="iprope_in_check() check failed, drop"
+
+
+2- When accessing the FortiGate for remote management (ping, telnet, ssh...), the service that is being accessed is enabled on the interface but there are trusted hosts configured which do not match the source IP of the ingressing packets 
+
+Example : ping  the DMZ interface FortiGate of a Fortigate, IP address 10.50.50.2, from source IP 10.50.50.1, with trusted hosts configured as :
+
+FGT # show system admin admin
+config system admin
+    edit "admin"
+        set trusthost1 10.20.20.0 255.255.255.0
+[...]
+
+id=36870 pri=emergency trace_id=26 msg="vd-root received a packet(proto=1, 10.50.50.1:5632->10.50.50.2:8) from dmz."
+id=36870 pri=emergency trace_id=26 msg="allocate a new session-0000da15"
+id=36870 pri=emergency trace_id=26 msg="iprope_in_check() check failed, drop"
+
+
+3- When accessing a FortiGate interface for remote management (ping, telnet, ssh...), via another interface of this same FortiGate, and no firewall policy is present.
+
+Example : ping wan2, IP address 10.70.70.1, via dmz, with no firewall policy from dmz to wan2
+
+id=36870 pri=emergency trace_id=756 msg="vd-root received a packet(proto=1, 10.50.50.1:11264->10.70.70.1:8) from dmz."
+id=36870 pri=emergency trace_id=756 msg="allocate a new session-00000220"
+id=36870 pri=emergency trace_id=756 msg="iprope_in_check() check failed, drop"
+
+
+4- A VIP parameter must be set as detailed in the KB article FD30491
+
+
+Root causes for "Denied by forward policy check"
+
+1- There is no firewall policy matching the traffic that needs to be routed or forwarded by the FortiGate (Traffic will hit the Implicit Deny rule)
+2- The traffic is matching a DENY firewall policy
+3- The traffic is matching a ALLOW firewall policy, but DISCLAIMER is enabled, in this case, traffic will not be accepted unless end user will accept the HTTP disclaimer purposed by Fortigate while browser external site.
+
+Example (messages similar for both root causes)  : 
+
+id=36870 pri=emergency trace_id=19 msg="vd-root received a packet(proto=1, 10.50.50.1:7680->10.60.60.1:8) from dmz."
+id=36870 pri=emergency trace_id=19 msg="allocate a new session-0000007d"
+id=36870 pri=emergency trace_id=19 msg="Denied by forward policy check"
+
+
+Root cause for "reverse path check fail, drop"
+
+This is detailed in the related KB article at the end of this page : "Details about FortiOS RPF (Reverse Path Forwarding), also called Anti-Spoofing "
