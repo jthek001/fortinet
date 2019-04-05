@@ -1,0 +1,69 @@
+When troubleshooting connectivity issues through a Fortigate, the "diagnose debug flow" command output may show that all sessions from a host are blocked by the Fortigate because the host MAC address is being blacklisted.
+
+Example : 
+
+2010-03-20 07:10:53 id=36870 trace_id=30 func=resolve_ip_tuple_fast line=3273 msg="vd-root received a packet(proto=17, 10.40.144.11:123->10.132.2.21:123) from internal."
+2010-03-20 07:10:53 id=36870 trace_id=30 func=resolve_ip_tuple line=3395 msg="allocate a new session-00000ca5"
+2010-03-20 07:10:53 id=36870 trace_id=30 func=vf_ip4_route_input line=1609 msg="find a route: gw-10.8.40.1 via wan1"
+2010-03-20 07:10:53 id=36870 trace_id=30 func=fw_forward_handler line=299 msg="HWaddr-30:00:01:02:03:04 is in black list, drop"
+
+
+A traffic violation message is logged by Fortigate at the same time (traffic log) :
+
+device_id=FWF50B3G08500642 log_id=3 subtype=violation type=traffic timestamp=1269964125 pri=warning itime=1269964124 vd=root src=10.40.144.11 srcname=10.40.144.11 src_port=123 dst=10.132.2.21 dstname=10.132.2.21 dst_port=123 service=123/udp proto=17 app_type=N/A duration=0 rule=0 policyid=0 sent=0 rcvd=0 src_int=internal dst_int=wan1 SN=2169 carrier_ep=N/A vpn=N/A status=deny user=N/A group=N/A
+
+Solution
+This is due to the activation of ipmacbinding feature in conjunction with DHCP server in the Fortigate ingress interface.
+
+In this example:
+
+config system interface
+    edit "internal"
+        set vdom "root"
+        set ip 10.40.144.70 255.255.255.0
+        set allowaccess ping https ssh snmp http telnet
+        set gwdetect enable
+        set detectserver "10.40.100.70"
+        set ipmac enable      <<<<<<<<
+        set type physical
+        set alias "LAN-Office"
+    next
+
+*and*
+
+config system dhcp server
+     edit "LAN"
+        set default-gateway 10.40.144.70
+        set dns-server1 10.40.100.60
+        set domain "lab.com"
+        set interface "internal"
+        set netmask 255.255.255.0
+        set end-ip 10.40.144.200
+        set start-ip 10.40.144.100
+    next
+
+
+With this configuration,the ipmacbinding table will be populated automatically with all DHCP clients from the internal network. All other hosts with a static IP configuration will have their MAC address "blacklisted" by the FortiGate.
+
+
+There are two possibilities to fix the problem
+
+1- Disable ipmac in the internal interface:
+
+  config system interface
+      edit internal
+      unset ipmac
+  end
+
+
+OR...
+
+2 - Create manual entries in the ipmacbinding table for each host with a static IP address in the network. For example:
+
+config firewall ipmacbinding table
+        edit 1
+         set ip 10.40.144.11
+         set mac 30:01:02:03:04:05
+         set name my_network_device
+        set status enable
+end
