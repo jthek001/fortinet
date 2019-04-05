@@ -25,3 +25,17 @@ VLAN10_P2 (VLAN ID 10 on port2)
 VDOM "Customer3"
 VLAN30_P1 (VLAN ID 30 on port1)
 VLAN30_P2 (VLAN ID 30 on port2)
+
+
+Change of VLAN ID
+
+All,
+I find it quite unbelievable that you can't change the VLAN ID of an interface once it has been created. T
+his must be the only network equipment we own that does not allow this. And we have a lot.
+
+
+
+Backup the config, edit the interfaces VLAN ID and restore the config. It will require a reboot of the firewall.
+
+
+
