@@ -1,0 +1,27 @@
+This articles gives the rules when creating VLAN and VDOM interface assignment
+
+VLAN
+VLANs can be created on any physical or aggregate (802.3ad)  interfaces
+The same VLAN number cannot be configured twice on the same physical interface
+The same VLAN number can be used on different physical interfaces
+The usable VLAN ID range is from 1 to 4094
+
+VDOM interface assignment
+Two VDOMs cannot share the same interface or VLAN
+A VLAN sub-interface can belong to a different VDOM than the physical interface it is attached to.
+
+
+Example of VLAN setting and VDOM assignment
+
+VDOM  "Customer1" 
+physical interface port1
+VLAN10_P1 (VLAN ID 10 on port1)
+VLAN20_P1 (VLAN ID 20 on port1)
+
+VDOM "Customer2"
+physical interface port2
+VLAN10_P2 (VLAN ID 10 on port2)
+
+VDOM "Customer3"
+VLAN30_P1 (VLAN ID 30 on port1)
+VLAN30_P2 (VLAN ID 30 on port2)
